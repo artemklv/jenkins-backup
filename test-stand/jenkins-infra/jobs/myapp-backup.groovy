@@ -6,17 +6,19 @@
 
 def env = System.getenv()
 
-// Default settings, overridable per build through the job parameters
-def DEFAULTS = [
-    MONGO_HOST            : 'mongodb-test',
-    MONGO_PORT            : '27017',
-    MONGO_DB              : 'myapp',
-    TARGET_DB             : 'myapp_restore',
-    MONGO_AUTH_SOURCE     : 'admin',
-    MONGO_CREDENTIALS_ID  : 'mongo-backup-credentials',
-    BACKUP_DIR            : '/var/backups/mongodb',
-    RETENTION_DAYS        : '7',
-    AUTO_ROTATE_AFTER_DUMP: true,
+// Job settings: hidden parameters, shown and edited only on the job Configure page
+// (edits there are overwritten by this file on the next Jenkins start).
+// Each entry: name -> [default value, description]
+def SETTINGS = [
+    BACKUP_DIR            : ['/var/backups/mongodb', 'Backup directory on the Jenkins controller (shared disk)'],
+    MONGO_HOST            : ['mongodb-test', 'MongoDB host'],
+    MONGO_PORT            : ['27017', 'MongoDB port'],
+    MONGO_DB              : ['myapp', 'Database to back up'],
+    TARGET_DB             : ['myapp_restore', 'Database to restore into (its collections are replaced)'],
+    MONGO_AUTH_SOURCE     : ['admin', 'Authentication database'],
+    MONGO_CREDENTIALS_ID  : ['mongo-backup-credentials', 'Jenkins username/password credential for MongoDB'],
+    RETENTION_DAYS        : ['7', 'Backups older than this number of days are removed by rotation'],
+    AUTO_ROTATE_AFTER_DUMP: ['true', 'Run rotation after a successful create (true/false)'],
 ]
 
 // Active Choices scripts run on the controller in the Groovy sandbox each time
@@ -102,7 +104,8 @@ pipelineJob('myapp-backup') {
     properties {
         disableConcurrentBuilds()
 
-        // All parameters in one block (dynamic DSL), in the order shown on the form.
+        // Build form: ACTION, the backup table and the file list; everything else is a hidden setting.
+        // All parameters are in one block (dynamic DSL).
         // Active Choices scripts are sandboxed, so they need no manual approval.
         parameters {
             parameterDefinitions {
@@ -112,12 +115,6 @@ pipelineJob('myapp-backup') {
                     description('create: new backup | download: publish the selected backup as a build artifact | ' +
                                 'restore: restore the selected backup into TARGET_DB | ' +
                                 'delete: remove the selected backup | rotate: remove backups older than RETENTION_DAYS')
-                }
-                string {
-                    name('BACKUP_DIR')
-                    defaultValue(DEFAULTS.BACKUP_DIR)
-                    description('Backup directory on the Jenkins controller (shared disk)')
-                    trim(true)
                 }
                 activeChoiceHtml {
                     name('BACKUPS_INFO_TABLE')
@@ -160,52 +157,13 @@ pipelineJob('myapp-backup') {
                         }
                     }
                 }
-                string {
-                    name('MONGO_HOST')
-                    defaultValue(DEFAULTS.MONGO_HOST)
-                    description('MongoDB host')
-                    trim(true)
-                }
-                string {
-                    name('MONGO_PORT')
-                    defaultValue(DEFAULTS.MONGO_PORT)
-                    description('MongoDB port')
-                    trim(true)
-                }
-                string {
-                    name('MONGO_DB')
-                    defaultValue(DEFAULTS.MONGO_DB)
-                    description('Database to back up')
-                    trim(true)
-                }
-                string {
-                    name('TARGET_DB')
-                    defaultValue(DEFAULTS.TARGET_DB)
-                    description('Database to restore into (its collections are replaced)')
-                    trim(true)
-                }
-                string {
-                    name('MONGO_AUTH_SOURCE')
-                    defaultValue(DEFAULTS.MONGO_AUTH_SOURCE)
-                    description('Authentication database')
-                    trim(true)
-                }
-                string {
-                    name('MONGO_CREDENTIALS_ID')
-                    defaultValue(DEFAULTS.MONGO_CREDENTIALS_ID)
-                    description('Jenkins username/password credential for MongoDB')
-                    trim(true)
-                }
-                string {
-                    name('RETENTION_DAYS')
-                    defaultValue(DEFAULTS.RETENTION_DAYS)
-                    description('Backups older than this number of days are removed by rotation')
-                    trim(true)
-                }
-                booleanParam {
-                    name('AUTO_ROTATE_AFTER_DUMP')
-                    defaultValue(DEFAULTS.AUTO_ROTATE_AFTER_DUMP)
-                    description('Run rotation after a successful create')
+                // Job settings: not shown on the build form
+                SETTINGS.each { settingName, setting ->
+                    wHideParameterDefinition {
+                        name(settingName)
+                        defaultValue(setting[0])
+                        description(setting[1])
+                    }
                 }
             }
         }

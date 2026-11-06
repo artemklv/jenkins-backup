@@ -11,3 +11,4 @@ configuration-as-code
 matrix-auth
 job-dsl
 git
+hidden-parameter

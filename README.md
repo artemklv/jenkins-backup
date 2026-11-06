@@ -69,6 +69,11 @@ The `myapp-backup` job is created by JCasC from the Job DSL script
 (parameters and their defaults). It runs [`.jenkins/Jenkinsfile.backup`](.jenkins/Jenkinsfile.backup)
 from `BACKUP_REPO_URL`, so push changes before running it.
 
+The build form shows only `ACTION`, the backup table and `SELECTED_BACKUP`.
+The job settings (MongoDB connection, `TARGET_DB`, `BACKUP_DIR`, retention) are hidden parameters.
+They are visible on the job **Configure** page, and their values come from `SETTINGS` in the Job DSL script.
+Edits made on the Configure page are lost on the next Jenkins start.
+
 Use **Build with Parameters**:
 
 | `ACTION` | What it does |

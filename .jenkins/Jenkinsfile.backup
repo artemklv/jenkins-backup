@@ -83,7 +83,8 @@ pipeline {
                     sh 'bash "$SCRIPTS_DIR/db-dump.sh"'
                 }
                 script {
-                    if (params.AUTO_ROTATE_AFTER_DUMP) {
+                    // Hidden parameters are strings
+                    if ("${params.AUTO_ROTATE_AFTER_DUMP}" == 'true') {
                         sh 'bash "$SCRIPTS_DIR/retention.sh"'
                     } else {
                         echo 'Auto-rotation is disabled, skipping'
