@@ -93,26 +93,68 @@ return (dir.listFiles() ?: [])
     .collect { it.name }
 '''
 
+def DOWNLOAD_LOG_SCRIPT = '''
+// Rendered only when the SHOW_DOWNLOAD_LOG checkbox is checked.
+// The checkbox value is "on" when checked and empty otherwise; it is not bound
+// when the form is first rendered on the server.
+def show = ''
+try {
+    show = SHOW_DOWNLOAD_LOG
+} catch (MissingPropertyException ignored) {
+}
+if (!(show in ['on', 'true'])) {
+    return ''
+}
+// Audit Trail log files (see jenkins-casc.yaml); the newest entries go first
+def auditDir = new File('/var/jenkins_home/audit')
+def logFiles = (auditDir.isDirectory() ? auditDir.listFiles() : [])
+    .findAll { it.isFile() && it.name.startsWith('audit.log') && !it.name.endsWith('.lck') }
+    .sort { a, b -> a.lastModified() <=> b.lastModified() }
+def esc = { String s -> s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') }
+def rows = []
+logFiles.each { f ->
+    f.text.split('\\n').each { line ->
+        // Format: "<date> /userContent/backups/<file> by <user> from <ip>"
+        def m = line =~ /^(.+?) \\/userContent\\/backups\\/(\\S+) by (\\S+) from (\\S+)/
+        if (m.find()) {
+            rows.add([m.group(1), m.group(2), m.group(3), m.group(4)])
+        }
+    }
+}
+if (rows.isEmpty()) {
+    return '<p>No downloads recorded yet.</p>'
+}
+rows = rows.reverse()
+// The HTML sanitizer drops CSS overflow, so a read-only textarea provides the
+// scroll bar: at most 8 lines are visible and the form does not grow
+def line = { r -> String.format('%-28s %-12s %-16s %s', r[0], r[2], r[3], r[1]) }
+def text = [line(['Time (UTC)', 'File', 'User', 'IP'])] + rows.collect { line(it) }
+def visible = Math.min(text.size(), 8)
+return '<textarea readonly rows="' + visible + '" cols="110" style="font-family:monospace">' +
+       esc(text.join('\\n')) + '</textarea>' +
+       "<p>Total: ${rows.size()} download(s)</p>"
+'''
+
 pipelineJob('myapp-backup') {
-    description('MongoDB backups: create, download, restore, delete, rotate (.jenkins/Jenkinsfile.backup)')
+    description('MongoDB backups: create, restore, delete, rotate; download via the backup table (.jenkins/Jenkinsfile.backup)')
 
     logRotator {
         numToKeep(30)
-        artifactNumToKeep(5)
     }
 
     properties {
         disableConcurrentBuilds()
 
-        // Build form: ACTION, the backup table and the file list; everything else is a hidden setting.
+        // Build form: ACTION, the backup table, the file list and the download log;
+        // everything else is a hidden setting.
         // All parameters are in one block (dynamic DSL).
         // Active Choices scripts are sandboxed, so they need no manual approval.
         parameters {
             parameterDefinitions {
                 choice {
                     name('ACTION')
-                    choices(['create', 'download', 'restore', 'delete', 'rotate'].join('\n'))
-                    description('create: new backup | download: publish the selected backup as a build artifact | ' +
+                    choices(['create', 'restore', 'delete', 'rotate'].join('\n'))
+                    description('create: new backup | ' +
                                 'restore: restore the selected backup into TARGET_DB | ' +
                                 'delete: remove the selected backup | rotate: remove backups older than RETENTION_DAYS')
                 }
@@ -138,7 +180,7 @@ pipelineJob('myapp-backup') {
                 }
                 reactiveChoice {
                     name('SELECTED_BACKUP')
-                    description('Backup file for download / restore / delete (newest first)')
+                    description('Backup file for restore / delete (newest first)')
                     randomName('choice-parameter-selected-backup')
                     choiceType('PT_SINGLE_SELECT')
                     filterable(false)
@@ -152,6 +194,31 @@ pipelineJob('myapp-backup') {
                             }
                             fallbackScript {
                                 script('return []')
+                                sandbox(true)
+                            }
+                        }
+                    }
+                }
+                booleanParam {
+                    name('SHOW_DOWNLOAD_LOG')
+                    defaultValue(false)
+                    description('Show who downloaded backups and when')
+                }
+                activeChoiceHtml {
+                    name('DOWNLOAD_LOG')
+                    description('')
+                    randomName('choice-parameter-download-log')
+                    choiceType('ET_FORMATTED_HTML')
+                    omitValueField(true)
+                    referencedParameters('SHOW_DOWNLOAD_LOG')
+                    script {
+                        groovyScript {
+                            script {
+                                script(DOWNLOAD_LOG_SCRIPT)
+                                sandbox(true)
+                            }
+                            fallbackScript {
+                                script('return "<p>Failed to read the download log</p>"')
                                 sandbox(true)
                             }
                         }

@@ -69,7 +69,7 @@ The `myapp-backup` job is created by JCasC from the Job DSL script
 (parameters and their defaults). It runs [`.jenkins/Jenkinsfile.backup`](.jenkins/Jenkinsfile.backup)
 from `BACKUP_REPO_URL`, so push changes before running it.
 
-The build form shows only `ACTION`, the backup table and `SELECTED_BACKUP`.
+The build form shows only `ACTION`, the backup table, `SELECTED_BACKUP` and the download log checkbox.
 The job settings (MongoDB connection, `TARGET_DB`, `BACKUP_DIR`, retention) are hidden parameters.
 They are visible on the job **Configure** page, and their values come from `SETTINGS` in the Job DSL script.
 Edits made on the Configure page are lost on the next Jenkins start.
@@ -79,13 +79,14 @@ Use **Build with Parameters**:
 | `ACTION` | What it does |
 |---|---|
 | `create` | `mongodump` of `MONGO_DB` into `BACKUP_DIR` (`.archive.gz` + `.sha256`), then rotation if `AUTO_ROTATE_AFTER_DUMP` |
-| `download` | Publishes `SELECTED_BACKUP` as a build artifact |
 | `restore` | Verifies the checksum and restores `SELECTED_BACKUP` into `TARGET_DB` (collections are dropped first) |
 | `delete` | Removes `SELECTED_BACKUP` and its `.sha256` |
 | `rotate` | Removes backups older than `RETENTION_DAYS` (the newest backup is always kept) |
 
 `BACKUPS_INFO_TABLE` shows the backups in `BACKUP_DIR` with download links, and `SELECTED_BACKUP` lists them newest first.
 The links point to `/userContent/backups/`: Jenkins serves the shared disk there (read-only, login required).
+Downloads are recorded by the Audit Trail plugin in `/var/jenkins_home/audit/` (user, time, IP).
+Check `SHOW_DOWNLOAD_LOG` on the build form to see the log.
 MongoDB credentials come from the Jenkins credential `mongo-backup-credentials`, which JCasC creates from `MONGO_ROOT_*`.
 
 ### Logs

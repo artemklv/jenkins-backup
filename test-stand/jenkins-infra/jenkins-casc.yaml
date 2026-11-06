@@ -59,6 +59,15 @@ security:
       - "staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getText java.io.File"
 
 unclassified:
+  # Audit log: backup downloads (/userContent/backups/) and the plugin's default actions
+  audit-trail:
+    logBuildCause: true
+    pattern: ".*/(?:configSubmit|doDelete|postBuildResult|enable|disable|cancelQueue|stop|toggleLogKeep|doWipeOutWorkspace|createItem|createView|toggleOffline|cancelQuietDown|quietDown|restart|exit|safeExit)/?.*|/userContent/backups/.*"
+    loggers:
+      - logFile:
+          log: "/var/jenkins_home/audit/audit.log"
+          limit: 10
+          count: 5
   location:
     url: "${JENKINS_URL:-http://localhost:8080/}"
 

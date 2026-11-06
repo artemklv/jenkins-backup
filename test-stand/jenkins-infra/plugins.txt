@@ -12,3 +12,4 @@ matrix-auth
 job-dsl
 git
 hidden-parameter
+audit-trail

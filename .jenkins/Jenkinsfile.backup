@@ -1,4 +1,5 @@
-// MongoDB backup management pipeline: create, download, restore, delete, rotate.
+// MongoDB backup management pipeline: create, restore, delete, rotate.
+// Backups are downloaded through the links in the backup table (not by a build).
 //
 // Job parameters (including the Active Choices backup table and file list) and
 // their defaults are defined by the Job DSL script
@@ -6,7 +7,7 @@
 
 // Actions that operate on an existing backup file
 @groovy.transform.Field
-def FILE_ACTIONS = ['download', 'restore', 'delete']
+def FILE_ACTIONS = ['restore', 'delete']
 
 // Allowed backup file names: no paths, only the archive extension
 @groovy.transform.Field
@@ -93,25 +94,6 @@ pipeline {
             }
         }
 
-        stage('Download') {
-            when { expression { params.ACTION == 'download' && env.RUN_ACTION == 'true' } }
-            steps {
-                sh '''
-                    set -eu
-                    rm -rf backup-download && mkdir backup-download
-                    cp -v "$BACKUP_DIR/$SELECTED_BACKUP" backup-download/
-                    if [ -f "$BACKUP_DIR/$SELECTED_BACKUP.sha256" ]; then
-                        cp -v "$BACKUP_DIR/$SELECTED_BACKUP.sha256" backup-download/
-                        (cd backup-download && sha256sum -c "$SELECTED_BACKUP.sha256")
-                    else
-                        echo "WARNING: no checksum file for $SELECTED_BACKUP"
-                    fi
-                '''
-                archiveArtifacts artifacts: 'backup-download/*', fingerprint: true
-                echo "Download link: ${env.BUILD_URL}artifact/backup-download/${params.SELECTED_BACKUP}"
-            }
-        }
-
         stage('Restore') {
             when { expression { params.ACTION == 'restore' && env.RUN_ACTION == 'true' } }
             steps {
@@ -152,7 +134,6 @@ pipeline {
             echo "Action '${params.ACTION}' failed, see the log above"
         }
         cleanup {
-            // Downloaded copies are already archived as build artifacts
             deleteDir()
         }
     }
