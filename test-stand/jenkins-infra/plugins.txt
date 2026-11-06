@@ -1,0 +1,13 @@
+# Requested plugins
+workflow-aggregator
+pipeline-stage-view
+uno-choice
+htmlpublisher
+credentials-binding
+pipeline-aws
+configuration-as-code
+
+# Required by jenkins-casc.yaml
+matrix-auth
+job-dsl
+git

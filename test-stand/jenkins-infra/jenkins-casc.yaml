@@ -1,0 +1,56 @@
+jenkins:
+  systemMessage: "MyApp Backup System — Jenkins configured via JCasC"
+  numExecutors: 2
+  mode: NORMAL
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          name: "Administrator"
+          password: "${JENKINS_ADMIN_PASSWORD}"
+        - id: "operator"
+          name: "Operator"
+          password: "${JENKINS_OPERATOR_PASSWORD}"
+
+  authorizationStrategy:
+    globalMatrix:
+      entries:
+        - user:
+            name: "admin"
+            permissions:
+              - "Overall/Administer"
+        - user:
+            name: "operator"
+            permissions:
+              - "Overall/Read"
+              - "View/Read"
+              - "Job/Read"
+              - "Job/Build"
+              - "Job/Cancel"
+
+unclassified:
+  location:
+    url: "${JENKINS_URL:-http://localhost:8080/}"
+
+jobs:
+  - script: >
+      pipelineJob('myapp-backup') {
+        description('Daily MyApp database backup (.jenkins/Jenkinsfile.backup)')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote {
+                  url('${BACKUP_REPO_URL}')
+                  // credentials('git-credentials') // for a private repository
+                }
+                branch('${BACKUP_REPO_BRANCH:-main}')
+              }
+            }
+            scriptPath('.jenkins/Jenkinsfile.backup')
+            lightweight(true)
+          }
+        }
+      }

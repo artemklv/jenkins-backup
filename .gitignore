@@ -1,0 +1,24 @@
+# Backup data on the shared test disk (keep the folder itself)
+test-stand/mock-storage/*
+!test-stand/mock-storage/.gitkeep
+
+# Backup archives anywhere in the repo
+*.archive
+*.archive.gz
+*.bson
+*.bson.gz
+dump/
+
+# Local secrets and overrides
+# test-stand/.env is committed on purpose: it holds test-only credentials
+.env.local
+*.local.env
+backup-core/config/*.env
+docker-compose.override.yml
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.tmp
