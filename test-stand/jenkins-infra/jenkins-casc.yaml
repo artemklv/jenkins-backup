@@ -30,27 +30,37 @@ jenkins:
               - "Job/Build"
               - "Job/Cancel"
 
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "mongo-backup-credentials"
+              description: "MongoDB user for backup jobs"
+              username: "${MONGO_ROOT_USERNAME:-root}"
+              password: "${MONGO_ROOT_PASSWORD}"
+
+security:
+  scriptApproval:
+    # Calls used by the Active Choices scripts in .jenkins/Jenkinsfile.backup
+    # to list backups in BACKUP_DIR
+    approvedSignatures:
+      - "new java.io.File java.io.File java.lang.String"
+      - "new java.io.File java.lang.String"
+      - "method java.io.File exists"
+      - "method java.io.File getName"
+      - "method java.io.File getPath"
+      - "method java.io.File isDirectory"
+      - "method java.io.File isFile"
+      - "method java.io.File lastModified"
+      - "method java.io.File length"
+      - "method java.io.File listFiles"
+
 unclassified:
   location:
     url: "${JENKINS_URL:-http://localhost:8080/}"
 
 jobs:
-  - script: >
-      pipelineJob('myapp-backup') {
-        description('Daily MyApp database backup (.jenkins/Jenkinsfile.backup)')
-        definition {
-          cpsScm {
-            scm {
-              git {
-                remote {
-                  url('${BACKUP_REPO_URL}')
-                  // credentials('git-credentials') // for a private repository
-                }
-                branch('${BACKUP_REPO_BRANCH:-main}')
-              }
-            }
-            scriptPath('.jenkins/Jenkinsfile.backup')
-            lightweight(true)
-          }
-        }
-      }
+  # Job DSL scripts copied into the image (see Dockerfile)
+  - file: /var/jenkins_casc/jobs/myapp-backup.groovy

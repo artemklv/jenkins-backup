@@ -62,6 +62,26 @@ docker compose ps
     --db myapp --gzip --archive=/var/backups/mongodb/manual-test.archive.gz
   ```
 
+### Backup pipeline
+
+The `myapp-backup` job is created by JCasC from the Job DSL script
+[`test-stand/jenkins-infra/jobs/myapp-backup.groovy`](test-stand/jenkins-infra/jobs/myapp-backup.groovy)
+(parameters and their defaults). It runs [`.jenkins/Jenkinsfile.backup`](.jenkins/Jenkinsfile.backup)
+from `BACKUP_REPO_URL`, so push changes before running it.
+
+Use **Build with Parameters**:
+
+| `ACTION` | What it does |
+|---|---|
+| `create` | `mongodump` of `MONGO_DB` into `BACKUP_DIR` (`.archive.gz` + `.sha256`), then rotation if `AUTO_ROTATE_AFTER_DUMP` |
+| `download` | Publishes `SELECTED_BACKUP` as a build artifact |
+| `restore` | Verifies the checksum and restores `SELECTED_BACKUP` into `TARGET_DB` (collections are dropped first) |
+| `delete` | Removes `SELECTED_BACKUP` and its `.sha256` |
+| `rotate` | Removes backups older than `RETENTION_DAYS` (the newest backup is always kept) |
+
+`BACKUPS_INFO_TABLE` shows the backups in `BACKUP_DIR`, and `SELECTED_BACKUP` lists them newest first.
+MongoDB credentials come from the Jenkins credential `mongo-backup-credentials`, which JCasC creates from `MONGO_ROOT_*`.
+
 ### Logs
 
 ```bash

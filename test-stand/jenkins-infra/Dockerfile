@@ -33,3 +33,4 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 
 # Jenkins Configuration as Code
 COPY --chown=jenkins:jenkins jenkins-casc.yaml /var/jenkins_casc/jenkins-casc.yaml
+COPY --chown=jenkins:jenkins jobs/ /var/jenkins_casc/jobs/

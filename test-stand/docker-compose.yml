@@ -16,9 +16,19 @@ services:
       BACKUP_REPO_URL: ${BACKUP_REPO_URL}
       BACKUP_REPO_BRANCH: ${BACKUP_REPO_BRANCH:-main}
       JENKINS_URL: ${JENKINS_URL:-http://localhost:8080/}
+      # MongoDB credential for backup jobs (JCasC: mongo-backup-credentials)
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-root}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - jenkins_data:/var/jenkins_home
       - ./mock-storage:/var/backups/mongodb   # Shared backup disk
+    healthcheck:
+      # Ready when the web UI answers (JCasC and jobs are applied before that)
+      test: ["CMD", "curl", "-fs", "-o", "/dev/null", "http://localhost:8080/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     depends_on:
       backup-storage:
         condition: service_healthy

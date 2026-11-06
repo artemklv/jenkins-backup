@@ -1,0 +1,158 @@
+// MongoDB backup management pipeline: create, download, restore, delete, rotate.
+//
+// Job parameters (including the Active Choices backup table and file list) and
+// their defaults are defined by the Job DSL script
+// test-stand/jenkins-infra/jobs/myapp-backup.groovy, loaded by JCasC.
+
+// Actions that operate on an existing backup file
+@groovy.transform.Field
+def FILE_ACTIONS = ['download', 'restore', 'delete']
+
+// Allowed backup file names: no paths, only the archive extension
+@groovy.transform.Field
+def BACKUP_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\.archive\.gz$/
+
+pipeline {
+    agent any
+
+    options {
+        timeout(time: 2, unit: 'HOURS')
+    }
+
+    environment {
+        SCRIPTS_DIR          = "${WORKSPACE}/backup-core/scripts"
+        // Settings for the shell scripts in backup-core/scripts
+        BACKUP_DIR           = "${params.BACKUP_DIR}"
+        SELECTED_BACKUP      = "${params.SELECTED_BACKUP ?: ''}"
+        MONGO_HOST           = "${params.MONGO_HOST}"
+        MONGO_PORT           = "${params.MONGO_PORT}"
+        MONGO_DB             = "${params.MONGO_DB}"
+        TARGET_DB            = "${params.TARGET_DB}"
+        MONGO_AUTH_SOURCE    = "${params.MONGO_AUTH_SOURCE}"
+        RETENTION_DAYS       = "${params.RETENTION_DAYS}"
+    }
+
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    if (!params.ACTION || !params.BACKUP_DIR) {
+                        error('Job parameters are missing: the job must be created by JCasC (jobs/myapp-backup.groovy)')
+                    }
+
+                    echo """Backup pipeline
+  ACTION          : ${params.ACTION}
+  SELECTED_BACKUP : ${params.SELECTED_BACKUP ?: '(none)'}
+  BACKUP_DIR      : ${params.BACKUP_DIR}
+  MongoDB         : ${params.MONGO_HOST}:${params.MONGO_PORT} (auth db: ${params.MONGO_AUTH_SOURCE})
+  MONGO_DB        : ${params.MONGO_DB}
+  TARGET_DB       : ${params.TARGET_DB}
+  RETENTION_DAYS  : ${params.RETENTION_DAYS} (auto-rotate after create: ${params.AUTO_ROTATE_AFTER_DUMP})"""
+
+                    if (!(params.RETENTION_DAYS ==~ /\d+/)) {
+                        error("RETENTION_DAYS must be a non-negative integer, got '${params.RETENTION_DAYS}'")
+                    }
+
+                    env.RUN_ACTION = 'true'
+                    if (params.ACTION in FILE_ACTIONS) {
+                        def selected = (params.SELECTED_BACKUP ?: '').trim()
+                        if (!selected) {
+                            // Nothing to work on: finish without failing the build
+                            unstable("No backup selected for '${params.ACTION}' (the backup list is empty or nothing was chosen). Nothing to do.")
+                            env.RUN_ACTION = 'false'
+                        } else {
+                            if (!(selected ==~ BACKUP_NAME_PATTERN)) {
+                                error("Invalid backup file name: '${selected}'")
+                            }
+                            if (sh(script: 'test -f "$BACKUP_DIR/$SELECTED_BACKUP"', returnStatus: true) != 0) {
+                                error("Backup not found: ${params.BACKUP_DIR}/${selected}")
+                            }
+                            echo "Selected backup: ${params.BACKUP_DIR}/${selected}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Create') {
+            when { expression { params.ACTION == 'create' } }
+            steps {
+                withCredentials([usernamePassword(credentialsId: params.MONGO_CREDENTIALS_ID,
+                                                  usernameVariable: 'MONGO_USER',
+                                                  passwordVariable: 'MONGO_PASSWORD')]) {
+                    sh 'bash "$SCRIPTS_DIR/db-dump.sh"'
+                }
+                script {
+                    if (params.AUTO_ROTATE_AFTER_DUMP) {
+                        sh 'bash "$SCRIPTS_DIR/retention.sh"'
+                    } else {
+                        echo 'Auto-rotation is disabled, skipping'
+                    }
+                }
+            }
+        }
+
+        stage('Download') {
+            when { expression { params.ACTION == 'download' && env.RUN_ACTION == 'true' } }
+            steps {
+                sh '''
+                    set -eu
+                    rm -rf backup-download && mkdir backup-download
+                    cp -v "$BACKUP_DIR/$SELECTED_BACKUP" backup-download/
+                    if [ -f "$BACKUP_DIR/$SELECTED_BACKUP.sha256" ]; then
+                        cp -v "$BACKUP_DIR/$SELECTED_BACKUP.sha256" backup-download/
+                        (cd backup-download && sha256sum -c "$SELECTED_BACKUP.sha256")
+                    else
+                        echo "WARNING: no checksum file for $SELECTED_BACKUP"
+                    fi
+                '''
+                archiveArtifacts artifacts: 'backup-download/*', fingerprint: true
+                echo "Download link: ${env.BUILD_URL}artifact/backup-download/${params.SELECTED_BACKUP}"
+            }
+        }
+
+        stage('Restore') {
+            when { expression { params.ACTION == 'restore' && env.RUN_ACTION == 'true' } }
+            steps {
+                withCredentials([usernamePassword(credentialsId: params.MONGO_CREDENTIALS_ID,
+                                                  usernameVariable: 'MONGO_USER',
+                                                  passwordVariable: 'MONGO_PASSWORD')]) {
+                    sh 'bash "$SCRIPTS_DIR/db-restore.sh" "$SELECTED_BACKUP"'
+                }
+            }
+        }
+
+        stage('Delete') {
+            when { expression { params.ACTION == 'delete' && env.RUN_ACTION == 'true' } }
+            steps {
+                sh '''
+                    set -eu
+                    rm -fv -- "$BACKUP_DIR/$SELECTED_BACKUP" "$BACKUP_DIR/$SELECTED_BACKUP.sha256"
+                '''
+            }
+        }
+
+        stage('Rotate') {
+            when { expression { params.ACTION == 'rotate' } }
+            steps {
+                sh 'bash "$SCRIPTS_DIR/retention.sh"'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Action '${params.ACTION}' completed successfully"
+        }
+        unstable {
+            echo "Action '${params.ACTION}' finished with warnings"
+        }
+        failure {
+            echo "Action '${params.ACTION}' failed, see the log above"
+        }
+        cleanup {
+            // Downloaded copies are already archived as build artifacts
+            deleteDir()
+        }
+    }
+}
