@@ -22,6 +22,8 @@ services:
     volumes:
       - jenkins_data:/var/jenkins_home
       - ./mock-storage:/var/backups/mongodb   # Shared backup disk
+      # Same disk, read-only, served by Jenkins at /userContent/backups/ (download links)
+      - ./mock-storage:/var/jenkins_home/userContent/backups:ro
     healthcheck:
       # Ready when the web UI answers (JCasC and jobs are applied before that)
       test: ["CMD", "curl", "-fs", "-o", "/dev/null", "http://localhost:8080/login"]

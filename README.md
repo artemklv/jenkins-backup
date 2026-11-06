@@ -79,7 +79,8 @@ Use **Build with Parameters**:
 | `delete` | Removes `SELECTED_BACKUP` and its `.sha256` |
 | `rotate` | Removes backups older than `RETENTION_DAYS` (the newest backup is always kept) |
 
-`BACKUPS_INFO_TABLE` shows the backups in `BACKUP_DIR`, and `SELECTED_BACKUP` lists them newest first.
+`BACKUPS_INFO_TABLE` shows the backups in `BACKUP_DIR` with download links, and `SELECTED_BACKUP` lists them newest first.
+The links point to `/userContent/backups/`: Jenkins serves the shared disk there (read-only, login required).
 MongoDB credentials come from the Jenkins credential `mongo-backup-credentials`, which JCasC creates from `MONGO_ROOT_*`.
 
 ### Logs

@@ -40,15 +40,29 @@ if (files.isEmpty()) {
 files = files.sort { a, b -> b.lastModified() <=> a.lastModified() }
 def esc = { String s -> s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;') }
 def fmt = new java.text.SimpleDateFormat('yyyy-MM-dd HH:mm:ss')
+// Download links: the default backup directory is also mounted into
+// JENKINS_HOME/userContent/backups, which Jenkins serves at /userContent/backups/
+def linkable = dir.path == '/var/backups/mongodb'
+def downloadLink = { String name ->
+    if (!linkable || !(name ==~ /[A-Za-z0-9._-]+/)) {
+        return '-'
+    }
+    def url = '/userContent/backups/' + name
+    def links = ['<a href="' + url + '">archive</a>']
+    if (new File(dir, name + '.sha256').exists()) {
+        links.add('<a href="' + url + '.sha256">sha256</a>')
+    }
+    return links.join(' | ')
+}
 // Only inline styles survive the HTML sanitizer, so borders are set per cell
 def cell = 'style="border:1px solid #999;padding:4px 8px"'
 def html = []
 html.add('<table style="border-collapse:collapse">')
-html.add('<tr>' + ['#', 'File', 'Size, MB', 'Modified', 'SHA256'].collect { "<th ${cell}>${it}</th>" }.join('') + '</tr>')
+html.add('<tr>' + ['#', 'File', 'Size, MB', 'Modified', 'SHA256', 'Download'].collect { "<th ${cell}>${it}</th>" }.join('') + '</tr>')
 files.eachWithIndex { f, i ->
     def sizeMb = String.format('%.2f', f.length() / 1048576.0d)
     def checksum = new File(dir, f.name + '.sha256').exists() ? 'yes' : 'missing'
-    def values = [i + 1, esc(f.name), sizeMb, fmt.format(new Date(f.lastModified())), checksum]
+    def values = [i + 1, esc(f.name), sizeMb, fmt.format(new Date(f.lastModified())), checksum, downloadLink(f.name)]
     html.add('<tr>' + values.collect { "<td ${cell}>${it}</td>" }.join('') + '</tr>')
 }
 html.add('</table>')
