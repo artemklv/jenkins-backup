@@ -26,7 +26,7 @@ Shared backup disk: the host folder `test-stand/mock-storage/` is mounted into
 
 All variables for the test run are in [`test-stand/.env`](test-stand/.env) (test-only credentials).
 Docker Compose loads this file automatically.
-Set `BACKUP_REPO_URL` there to the real repository URL before running the backup job.
+To use a fork or another repository, change `BACKUP_REPO_URL` (and `BACKUP_REPO_BRANCH`) there.
 
 ### Start
 
