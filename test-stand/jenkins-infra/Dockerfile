@@ -34,3 +34,6 @@ RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 # Jenkins Configuration as Code
 COPY --chown=jenkins:jenkins jenkins-casc.yaml /var/jenkins_casc/jenkins-casc.yaml
 COPY --chown=jenkins:jenkins jobs/ /var/jenkins_casc/jobs/
+
+# Startup scripts; the .override suffix replaces the copy in an existing JENKINS_HOME
+COPY --chown=jenkins:jenkins init.groovy.d/csp.groovy /usr/share/jenkins/ref/init.groovy.d/csp.groovy.override

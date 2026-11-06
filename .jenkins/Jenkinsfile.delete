@@ -1,0 +1,60 @@
+// Job backup/<environment>/delete: delete the selected backup and its checksum.
+//
+// SELECTED_BACKUP is an Active Choices parameter; BACKUP_DIR is a property of
+// the environment folder, loaded by withFolderProperties().
+// Defined in test-stand/jenkins-infra/jobs/backup.groovy.
+
+pipeline {
+    agent any
+
+    options {
+        withFolderProperties()
+        timeout(time: 10, unit: 'MINUTES')
+    }
+
+    environment {
+        SCRIPTS_DIR = "${WORKSPACE}/backup-core/scripts"
+    }
+
+    stages {
+        stage('Settings') {
+            steps {
+                script {
+                    echo """Delete backup
+  Environment     : ${env.ENV_NAME}
+  SELECTED_BACKUP : ${params.SELECTED_BACKUP ?: '(none)'}
+  BACKUP_DIR      : ${env.BACKUP_DIR}"""
+
+                    if (!params.SELECTED_BACKUP?.trim()) {
+                        // Nothing to delete: finish without failing the build
+                        unstable('No backup selected (the backup list is empty or nothing was chosen). Nothing to do.')
+                        env.SKIP_ACTION = 'true'
+                    }
+                }
+            }
+        }
+
+        stage('Delete') {
+            when { expression { env.SKIP_ACTION != 'true' } }
+            steps {
+                sh 'bash "$SCRIPTS_DIR/delete.sh" "$SELECTED_BACKUP"'
+            }
+        }
+    }
+
+    post {
+        always {
+            // Refresh the backup report of this environment (job 'list' in the same folder)
+            script {
+                try {
+                    build job: 'list', wait: false
+                } catch (err) {
+                    echo "Could not trigger the 'list' job: ${err.message}"
+                }
+            }
+        }
+        cleanup {
+            deleteDir()
+        }
+    }
+}

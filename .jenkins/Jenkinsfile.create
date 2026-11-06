@@ -1,0 +1,64 @@
+// Job backup/<environment>/create: dump the database, then rotate old backups.
+//
+// Settings (MONGO_*, BACKUP_DIR, RETENTION_DAYS, ...) are properties of the
+// environment folder, loaded by withFolderProperties().
+// Defined in test-stand/jenkins-infra/jobs/backup.groovy.
+
+pipeline {
+    agent any
+
+    options {
+        withFolderProperties()
+        timeout(time: 2, unit: 'HOURS')
+    }
+
+    environment {
+        SCRIPTS_DIR = "${WORKSPACE}/backup-core/scripts"
+    }
+
+    stages {
+        stage('Settings') {
+            steps {
+                echo """Create backup
+  Environment     : ${env.ENV_NAME}
+  MongoDB         : ${env.MONGO_HOST}:${env.MONGO_PORT} (auth db: ${env.MONGO_AUTH_SOURCE})
+  MONGO_DB        : ${env.MONGO_DB}
+  BACKUP_DIR      : ${env.BACKUP_DIR}
+  RETENTION_DAYS  : ${env.RETENTION_DAYS} (auto-rotate: ${env.AUTO_ROTATE_AFTER_DUMP})"""
+            }
+        }
+
+        stage('Dump') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: env.MONGO_CREDENTIALS_ID,
+                                                  usernameVariable: 'MONGO_USER',
+                                                  passwordVariable: 'MONGO_PASSWORD')]) {
+                    sh 'bash "$SCRIPTS_DIR/db-dump.sh"'
+                }
+            }
+        }
+
+        stage('Rotate') {
+            when { expression { env.AUTO_ROTATE_AFTER_DUMP == 'true' } }
+            steps {
+                sh 'bash "$SCRIPTS_DIR/retention.sh"'
+            }
+        }
+    }
+
+    post {
+        always {
+            // Refresh the backup report of this environment (job 'list' in the same folder)
+            script {
+                try {
+                    build job: 'list', wait: false
+                } catch (err) {
+                    echo "Could not trigger the 'list' job: ${err.message}"
+                }
+            }
+        }
+        cleanup {
+            deleteDir()
+        }
+    }
+}

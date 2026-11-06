@@ -13,3 +13,5 @@ job-dsl
 git
 hidden-parameter
 audit-trail
+cloudbees-folder
+folder-properties

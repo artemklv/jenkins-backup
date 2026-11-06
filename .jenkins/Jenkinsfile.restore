@@ -1,0 +1,56 @@
+// Job backup/<environment>/restore: verify the checksum of the selected backup
+// and restore it into TARGET_DB.
+//
+// SELECTED_BACKUP is an Active Choices parameter; the other settings are
+// properties of the environment folder, loaded by withFolderProperties().
+// Defined in test-stand/jenkins-infra/jobs/backup.groovy.
+
+pipeline {
+    agent any
+
+    options {
+        withFolderProperties()
+        timeout(time: 2, unit: 'HOURS')
+    }
+
+    environment {
+        SCRIPTS_DIR = "${WORKSPACE}/backup-core/scripts"
+    }
+
+    stages {
+        stage('Settings') {
+            steps {
+                script {
+                    echo """Restore backup
+  Environment     : ${env.ENV_NAME}
+  SELECTED_BACKUP : ${params.SELECTED_BACKUP ?: '(none)'}
+  MongoDB         : ${env.MONGO_HOST}:${env.MONGO_PORT} (auth db: ${env.MONGO_AUTH_SOURCE})
+  TARGET_DB       : ${env.TARGET_DB}"""
+
+                    if (!params.SELECTED_BACKUP?.trim()) {
+                        // Nothing to restore: finish without failing the build
+                        unstable('No backup selected (the backup list is empty or nothing was chosen). Nothing to do.')
+                        env.SKIP_ACTION = 'true'
+                    }
+                }
+            }
+        }
+
+        stage('Restore') {
+            when { expression { env.SKIP_ACTION != 'true' } }
+            steps {
+                withCredentials([usernamePassword(credentialsId: env.MONGO_CREDENTIALS_ID,
+                                                  usernameVariable: 'MONGO_USER',
+                                                  passwordVariable: 'MONGO_PASSWORD')]) {
+                    sh 'bash "$SCRIPTS_DIR/db-restore.sh" "$SELECTED_BACKUP"'
+                }
+            }
+        }
+    }
+
+    post {
+        cleanup {
+            deleteDir()
+        }
+    }
+}

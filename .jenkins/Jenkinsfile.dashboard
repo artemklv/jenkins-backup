@@ -1,0 +1,37 @@
+// Job backup/<environment>/list: publish the "Backups" HTML report with the
+// backups of the environment (download links included) and the download log.
+//
+// Runs on a schedule and after every create / delete in the same folder.
+// Settings are properties of the environment folder, loaded by withFolderProperties().
+// Defined in test-stand/jenkins-infra/jobs/backup.groovy.
+
+pipeline {
+    agent any
+
+    options {
+        withFolderProperties()
+        timeout(time: 10, unit: 'MINUTES')
+    }
+
+    stages {
+        stage('Report') {
+            steps {
+                sh 'bash backup-core/scripts/report.sh backup-report'
+                publishHTML(target: [
+                    reportName           : 'Backups',
+                    reportDir            : 'backup-report',
+                    reportFiles          : 'index.html',
+                    keepAll              : false,
+                    alwaysLinkToLastBuild: true,
+                    allowMissing         : false,
+                ])
+            }
+        }
+    }
+
+    post {
+        cleanup {
+            deleteDir()
+        }
+    }
+}

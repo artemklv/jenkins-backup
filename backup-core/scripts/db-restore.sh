@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verify a backup checksum and restore it into TARGET_DB.
 #
-# Usage: db-restore.sh <backup file name or path>
+# Usage: db-restore.sh <backup file name>
 #
 # Environment:
 #   MONGO_HOST         MongoDB host (default: localhost)
@@ -18,7 +18,7 @@ set -euo pipefail
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [db-restore] $*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
 
-[[ $# -eq 1 ]] || die "Usage: $0 <backup file>"
+[[ $# -eq 1 ]] || die "Usage: $0 <backup file name>"
 
 MONGO_HOST="${MONGO_HOST:-localhost}"
 MONGO_PORT="${MONGO_PORT:-27017}"
@@ -26,8 +26,11 @@ MONGO_AUTH_SOURCE="${MONGO_AUTH_SOURCE:-admin}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/mongodb}"
 TARGET_DB="${TARGET_DB:?TARGET_DB is required}"
 
-name="$(basename "$1")"
+name="$1"
 file="${BACKUP_DIR}/${name}"
+
+# Plain file name only: no paths, only the archive extension
+[[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.archive\.gz$ ]] || die "Invalid backup file name: '${name}'"
 
 [[ -f "$file" ]] || die "Backup not found: ${file}"
 [[ -f "${file}.sha256" ]] || die "Checksum file not found: ${file}.sha256"

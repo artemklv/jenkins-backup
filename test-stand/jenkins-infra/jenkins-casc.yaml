@@ -73,4 +73,4 @@ unclassified:
 
 jobs:
   # Job DSL scripts copied into the image (see Dockerfile)
-  - file: /var/jenkins_casc/jobs/myapp-backup.groovy
+  - file: /var/jenkins_casc/jobs/backup.groovy

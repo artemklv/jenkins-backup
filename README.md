@@ -15,7 +15,8 @@ by the `jenkins-backup-network` bridge network:
 
 Shared backup disk: the host folder `test-stand/mock-storage/` is mounted into
 
-- `jenkins-server` at `/var/backups/mongodb` (read-write, Jenkins writes backups here)
+- `jenkins-server` at `/var/backups/mongodb` (read-write, Jenkins writes backups here, one subdirectory per environment)
+- `jenkins-server` at `/var/jenkins_home/userContent/backups` (read-only, Jenkins serves it at `/userContent/backups/` for download links)
 - `backup-storage` at `/srv/backups` (read-only)
 
 ### Prerequisites
@@ -59,35 +60,36 @@ docker compose ps
   ```bash
   docker exec jenkins-server mongodump \
     --uri 'mongodb://root:mongo123@mongodb-test:27017/?authSource=admin' \
-    --db myapp --gzip --archive=/var/backups/mongodb/manual-test.archive.gz
+    --db myapp --gzip --archive=/var/backups/mongodb/test/manual-test.archive.gz
   ```
 
-### Backup pipeline
+### Backup jobs
 
-The `myapp-backup` job is created by JCasC from the Job DSL script
-[`test-stand/jenkins-infra/jobs/myapp-backup.groovy`](test-stand/jenkins-infra/jobs/myapp-backup.groovy)
-(parameters and their defaults). It runs [`.jenkins/Jenkinsfile.backup`](.jenkins/Jenkinsfile.backup)
-from `BACKUP_REPO_URL`, so push changes before running it.
+Jobs are created by JCasC from the Job DSL script
+[`test-stand/jenkins-infra/jobs/backup.groovy`](test-stand/jenkins-infra/jobs/backup.groovy)
+and run the `.jenkins/Jenkinsfile.*` pipelines from `BACKUP_REPO_URL`, so push changes before running them.
 
-The build form shows only `ACTION`, the backup table, `SELECTED_BACKUP` and the download log checkbox.
-The job settings (MongoDB connection, `TARGET_DB`, `BACKUP_DIR`, retention) are hidden parameters.
-They are visible on the job **Configure** page, and their values come from `SETTINGS` in the Job DSL script.
-Edits made on the Configure page are lost on the next Jenkins start.
+```
+backup/                      top folder
+└── test/                    environment: settings are folder properties
+    ├── create               mongodump + rotation; daily and on demand
+    ├── restore              restore the selected backup into TARGET_DB
+    ├── delete               delete the selected backup
+    └── list                 "Backups" report: backups, download links, download log
+```
 
-Use **Build with Parameters**:
-
-| `ACTION` | What it does |
-|---|---|
-| `create` | `mongodump` of `MONGO_DB` into `BACKUP_DIR` (`.archive.gz` + `.sha256`), then rotation if `AUTO_ROTATE_AFTER_DUMP` |
-| `restore` | Verifies the checksum and restores `SELECTED_BACKUP` into `TARGET_DB` (collections are dropped first) |
-| `delete` | Removes `SELECTED_BACKUP` and its `.sha256` |
-| `rotate` | Removes backups older than `RETENTION_DAYS` (the newest backup is always kept) |
-
-`BACKUPS_INFO_TABLE` shows the backups in `BACKUP_DIR` with download links, and `SELECTED_BACKUP` lists them newest first.
-The links point to `/userContent/backups/`: Jenkins serves the shared disk there (read-only, login required).
-Downloads are recorded by the Audit Trail plugin in `/var/jenkins_home/audit/` (user, time, IP).
-Check `SHOW_DOWNLOAD_LOG` on the build form to see the log.
-MongoDB credentials come from the Jenkins credential `mongo-backup-credentials`, which JCasC creates from `MONGO_ROOT_*`.
+- **Environment settings** (`MONGO_*`, `TARGET_DB`, `RETENTION_DAYS`, `AUTO_ROTATE_AFTER_DUMP`)
+  are in `ENVIRONMENTS` in the Job DSL script and become properties of the environment folder.
+  The pipelines read them with `withFolderProperties()`. No secrets there:
+  `MONGO_CREDENTIALS_ID` only references a Jenkins credential.
+- **Backups** of an environment are stored in `/var/backups/mongodb/<environment>/`
+  (`.archive.gz` + `.sha256`). Rotation keeps the newest backup even if it is older than `RETENTION_DAYS`.
+- **restore / delete** show the backup table and a `SELECTED_BACKUP` list on the build form.
+- **Downloads**: open `list` → **Backups**, or use the links in the restore / delete table.
+  Jenkins serves the files at `/userContent/backups/<environment>/` (read-only, login required).
+  The Audit Trail plugin logs every download (user, time, IP) to `/var/jenkins_home/audit/`,
+  and the report shows that log. `list` is refreshed after create / delete and every 15 minutes.
+- To add an environment, add an entry to `ENVIRONMENTS` and rebuild the Jenkins image.
 
 ### Logs
 
