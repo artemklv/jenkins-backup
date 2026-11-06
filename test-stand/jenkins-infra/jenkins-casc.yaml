@@ -56,6 +56,7 @@ security:
       - "method java.io.File lastModified"
       - "method java.io.File length"
       - "method java.io.File listFiles"
+      - "staticMethod org.codehaus.groovy.runtime.DefaultGroovyMethods getText java.io.File"
 
 unclassified:
   location:
