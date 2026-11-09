@@ -10,7 +10,10 @@ def env = System.getenv()
 // (edits there are overwritten by this file on the next Jenkins start).
 // Each entry: name -> [default value, description]
 def SETTINGS = [
-    BACKUP_DIR            : ['/var/backups/mongodb', 'Backup directory on the Jenkins controller (shared disk)'],
+    BACKUP_DIR            : ['/var/backups/mongodb', 'Backup directory on the Jenkins controller (on the backup disk)'],
+    BACKUP_MOUNT          : ['/var/backups/mongodb', 'Mount point of the network backup disk; the build fails if it is not mounted (empty: no check)'],
+    MIN_FREE_SPACE_GB     : ['10', 'Free space in GB required in BACKUP_DIR before create (0: no check)'],
+    PIPELINE_TIMEOUT_HOURS: ['2', 'Build timeout in hours (raise it for large databases)'],
     MONGO_HOST            : ['mongodb-test', 'MongoDB host'],
     MONGO_PORT            : ['27017', 'MongoDB port'],
     MONGO_DB              : ['myapp', 'Database to back up'],

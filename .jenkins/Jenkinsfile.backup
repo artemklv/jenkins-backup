@@ -13,17 +13,28 @@ def FILE_ACTIONS = ['restore', 'delete']
 @groovy.transform.Field
 def BACKUP_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\.archive\.gz$/
 
+// Build timeout in hours from the PIPELINE_TIMEOUT_HOURS setting
+def timeoutHours() {
+    def value = "${params.PIPELINE_TIMEOUT_HOURS ?: ''}".trim()
+    if (!(value ==~ /[1-9]\d*/)) {
+        error("PIPELINE_TIMEOUT_HOURS must be a positive integer, got '${value}'")
+    }
+    return Integer.parseInt(value)
+}
+
 pipeline {
     agent any
 
     options {
-        timeout(time: 2, unit: 'HOURS')
+        // Large databases need more time: set PIPELINE_TIMEOUT_HOURS
+        timeout(time: timeoutHours(), unit: 'HOURS')
     }
 
     environment {
         SCRIPTS_DIR          = "${WORKSPACE}/backup-core/scripts"
         // Settings for the shell scripts in backup-core/scripts
         BACKUP_DIR           = "${params.BACKUP_DIR}"
+        BACKUP_MOUNT         = "${params.BACKUP_MOUNT ?: ''}"
         SELECTED_BACKUP      = "${params.SELECTED_BACKUP ?: ''}"
         MONGO_HOST           = "${params.MONGO_HOST}"
         MONGO_PORT           = "${params.MONGO_PORT}"
@@ -48,10 +59,18 @@ pipeline {
   MongoDB         : ${params.MONGO_HOST}:${params.MONGO_PORT} (auth db: ${params.MONGO_AUTH_SOURCE})
   MONGO_DB        : ${params.MONGO_DB}
   TARGET_DB       : ${params.TARGET_DB}
-  RETENTION_DAYS  : ${params.RETENTION_DAYS} (auto-rotate after create: ${params.AUTO_ROTATE_AFTER_DUMP})"""
+  RETENTION_DAYS  : ${params.RETENTION_DAYS} (auto-rotate after create: ${params.AUTO_ROTATE_AFTER_DUMP})
+  BACKUP_MOUNT    : ${params.BACKUP_MOUNT ?: '(not checked)'}
+  MIN_FREE_SPACE  : ${params.MIN_FREE_SPACE_GB} GB (checked before create)
+  TIMEOUT         : ${params.PIPELINE_TIMEOUT_HOURS} h"""
 
                     if (!(params.RETENTION_DAYS ==~ /\d+/)) {
                         error("RETENTION_DAYS must be a non-negative integer, got '${params.RETENTION_DAYS}'")
+                    }
+
+                    // Backup disk is mounted and writable; free space only matters for a new dump
+                    withEnv(["MIN_FREE_SPACE_GB=${params.ACTION == 'create' ? params.MIN_FREE_SPACE_GB : '0'}"]) {
+                        sh 'bash "$SCRIPTS_DIR/check-storage.sh"'
                     }
 
                     env.RUN_ACTION = 'true'

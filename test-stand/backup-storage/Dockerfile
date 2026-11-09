@@ -1,13 +1,20 @@
-# Backup storage node: holds backups on the shared disk and exposes
-# a read-only HTTP listing inside the Docker network.
-FROM nginx:1.27-alpine
+# Backup storage node: an NFS server that exports the backup disk.
+# Jenkins mounts the export over the network (NFSv4.1); there is no HTTP here.
+# Needs a privileged container: the kernel NFS server (nfsd) runs in the host kernel.
+FROM alpine:3.20
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+RUN apk add --no-cache nfs-utils
 
-# Mount point of the shared backup disk
-RUN mkdir -p /srv/backups
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
-EXPOSE 80
+# The exported directory must be a real filesystem (a volume), not the image overlay
+VOLUME /exports
 
+EXPOSE 2049
+
+# Healthy when nfsd runs with at least one thread
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
-  CMD wget -q -O /dev/null http://127.0.0.1/health || exit 1
+  CMD test "$(cat /proc/fs/nfsd/threads 2>/dev/null || echo 0)" -gt 0 || exit 1
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

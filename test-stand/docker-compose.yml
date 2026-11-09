@@ -1,5 +1,6 @@
 # Staging environment: Jenkins + MongoDB 3.6 + backup storage node.
-# Backups live in ./mock-storage, the shared disk of Jenkins and backup-storage.
+# Backups live on the storage node's disk (volume backup_disk), exported over NFS;
+# Jenkins mounts the export as the volume backup_nfs.
 
 services:
   jenkins-server:
@@ -21,9 +22,21 @@ services:
       MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
     volumes:
       - jenkins_data:/var/jenkins_home
-      - ./mock-storage:/var/backups/mongodb   # Shared backup disk
+      # Backup disk over NFS: jobs write backups here
+      - type: volume
+        source: backup_nfs
+        target: /var/backups/mongodb
+        volume:
+          # Do not copy image content into the volume: that would mount NFS
+          # at container creation, before the storage node is up
+          nocopy: true
       # Same disk, read-only, served by Jenkins at /userContent/backups/ (download links)
-      - ./mock-storage:/var/jenkins_home/userContent/backups:ro
+      - type: volume
+        source: backup_nfs
+        target: /var/jenkins_home/userContent/backups
+        read_only: true
+        volume:
+          nocopy: true
     healthcheck:
       # Ready when the web UI answers (JCasC and jobs are applied before that)
       test: ["CMD", "curl", "-fs", "-o", "/dev/null", "http://localhost:8080/login"]
@@ -65,17 +78,36 @@ services:
       context: ./backup-storage/
     image: myapp-backup-storage:latest
     container_name: backup-storage
+    # The kernel NFS server needs a privileged container
+    privileged: true
+    environment:
+      NFS_CLIENTS: ${BACKUP_NETWORK_SUBNET:-172.28.10.0/24}
     volumes:
-      - ./mock-storage:/srv/backups:ro   # Shared backup disk (written by Jenkins)
+      - backup_disk:/exports   # The backup disk itself
     networks:
-      - jenkins-backup-network
+      jenkins-backup-network:
+        # Fixed address: the Docker daemon mounts backup_nfs by IP, not by container name
+        ipv4_address: ${BACKUP_STORAGE_IP:-172.28.10.10}
     restart: unless-stopped
 
 networks:
   jenkins-backup-network:
     name: jenkins-backup-network
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${BACKUP_NETWORK_SUBNET:-172.28.10.0/24}
 
 volumes:
   jenkins_data:
   mongo_test_data:
+  # Backup disk on the storage node
+  backup_disk:
+  # NFS export of backup_disk, mounted into Jenkins.
+  # soft: if the storage node is unreachable, file operations fail with an error
+  # (the build fails) instead of hanging forever.
+  backup_nfs:
+    driver_opts:
+      type: nfs
+      o: "addr=${BACKUP_STORAGE_IP:-172.28.10.10},nfsvers=4.1,rw,soft,timeo=600,retrans=2"
+      device: ":/"
